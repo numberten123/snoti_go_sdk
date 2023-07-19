@@ -84,12 +84,12 @@ func NewClient(conf Config, handler Handler) *Client {
 		cfg:       conf,
 		handler:   handler,
 		heartbeat: make(chan string, 100),
+		msgChSize: uint64(runtime.NumCPU()),
 	}
 }
 
 // Start the snoti client.
 func (c *Client) Start() error {
-	c.msgChSize = uint64(runtime.NumCPU())
 	c.msgCh = make([]chan *Message, c.msgChSize)
 	for i := uint64(0); i < c.msgChSize; i++ {
 		c.msgCh[i] = make(chan *Message, 64)
