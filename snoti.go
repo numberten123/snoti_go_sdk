@@ -5,19 +5,22 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/zeromicro/go-zero/core/hash"
 	"runtime"
+	"strings"
 	"time"
 )
 
 // const Snoti cmd type.
 const (
-	CmdLoginReq  = "login_req"
-	CmdLoginRes  = "login_res"
-	CmdEventPush = "event_push"
-	CmdEventAck  = "event_ack"
-	CmdPing      = "ping"
-	CmdPong      = "pong"
+	CmdLoginReq      = "login_req"
+	CmdLoginRes      = "login_res"
+	CmdEventPush     = "event_push"
+	CmdEventAck      = "event_ack"
+	CmdSubscribe     = "subscribe_req"
+	CmdUnSubscribe   = "unsubscribe_req"
+	CmdRemoteControl = "remote_control_v2_req"
+	CmdPing          = "ping"
+	CmdPong          = "pong"
 )
 
 // Request Snoti请求协议.
@@ -29,13 +32,12 @@ type Request struct {
 	DeliveryID    int         `json:"delivery_id,omitempty"`
 }
 
-type Handler func(*Message)
+type Handler func([]byte)
 
 // Message Snoti回复协议.
 type Message struct {
-	Cmd     string `json:"cmd"`
-	Did     string `json:"did"`
-	Payload []byte
+	Cmd string `json:"cmd"`
+	Did string `json:"did"`
 }
 
 // Config Snoti 连接配置.
@@ -66,8 +68,8 @@ type Client struct {
 	conn      *tls.Conn
 	stopCh    chan struct{}
 	heartbeat chan string
-	msgCh     []chan *Message
-	msgChSize uint64
+	msgCh     []chan string
+	msgChSize int
 }
 
 // NewClient returns a new Snoti API client.
@@ -84,20 +86,19 @@ func NewClient(conf Config, handler Handler) *Client {
 		cfg:       conf,
 		handler:   handler,
 		heartbeat: make(chan string, 100),
-		msgChSize: uint64(runtime.NumCPU()),
+		msgChSize: runtime.NumCPU(),
 	}
 }
 
 // Start the snoti client.
-func (c *Client) Start() error {
-	c.msgCh = make([]chan *Message, c.msgChSize)
-	for i := uint64(0); i < c.msgChSize; i++ {
-		c.msgCh[i] = make(chan *Message, 64)
+func (c *Client) Start() {
+	c.msgCh = make([]chan string, c.msgChSize)
+	for i := 0; i < c.msgChSize; i++ {
+		c.msgCh[i] = make(chan string, 64)
 		go c.loop(c.msgCh[i])
 	}
 
-	go c.run()
-	return nil
+	c.run()
 }
 
 // Stop the snoti client.
@@ -117,6 +118,73 @@ func (c *Client) Ack(msgId string, deliveryId int) error {
 	}
 	data, _ := json.Marshal(pkt)
 	return c.Send(data)
+}
+
+type SubscribeData struct {
+	ProductKey string   `json:"product_key"`
+	AuthId     string   `json:"auth_id"`
+	AuthSecret string   `json:"auth_secret"`
+	SubKey     string   `json:"subkey"`
+	EventTypes []string `json:"events"`
+}
+
+// Subscribe message.
+func (c *Client) Subscribe(eventTypes string) error {
+	pkt := Request{
+		Cmd: CmdSubscribe,
+		Data: []SubscribeData{{
+			ProductKey: c.cfg.ProductKey,
+			AuthId:     c.cfg.AuthID,
+			AuthSecret: c.cfg.AuthSecret,
+			SubKey:     c.cfg.SubKey,
+			EventTypes: strings.Split(eventTypes, ","),
+		}},
+	}
+
+	buf, _ := json.Marshal(pkt)
+	return c.Send(buf)
+}
+
+// UnSubscribe message.
+func (c *Client) UnSubscribe(eventTypes string) error {
+	pkt := Request{
+		Cmd: CmdUnSubscribe,
+		Data: []SubscribeData{{
+			ProductKey: c.cfg.ProductKey,
+			AuthId:     c.cfg.AuthID,
+			AuthSecret: c.cfg.AuthSecret,
+			SubKey:     c.cfg.SubKey,
+			EventTypes: strings.Split(eventTypes, ","),
+		}},
+	}
+
+	buf, _ := json.Marshal(pkt)
+	return c.Send(buf)
+}
+
+type ControlData struct {
+	Cmd  string              `json:"cmd"`
+	Data []ControlDataDetail `json:"data"`
+}
+
+type ControlDataDetail struct {
+	Did          string                 `json:"did"`
+	Mac          string                 `json:"mac"`
+	ProductKey   string                 `json:"product_key"`
+	BinaryCoding string                 `json:"binary_coding"`
+	Attrs        map[string]interface{} `json:"attrs"`
+	Raw          string                 `json:"raw"`
+}
+
+// RemoteControl send message to device by mqtt topic `app2dev/did`.
+func (c *Client) RemoteControl(data ControlData) error {
+	pkt := Request{
+		Cmd:  CmdRemoteControl,
+		Data: data,
+	}
+
+	buf, _ := json.Marshal(pkt)
+	return c.Send(buf)
 }
 
 // Send message to snoti server.
@@ -152,32 +220,32 @@ func (c *Client) run() {
 
 func (c *Client) receive() {
 	reader := bufio.NewReaderSize(c.conn, c.cfg.PacketSize)
-	for {
-		msg := &Message{}
-		data, err := reader.ReadSlice('\n')
+	for i := 0; i >= 0; i++ {
+		payload, err := reader.ReadSlice('\n')
 		if err != nil {
 			fmt.Printf("ReadSlice error:%s\n", err.Error())
 			return
 		}
-		if err = json.Unmarshal(data, msg); err != nil {
-			fmt.Printf("Unmarshal data err:%s\n", err.Error())
-			continue
-		}
-
-		msg.Payload = data
-		c.msgCh[hash.Hash([]byte(msg.Did))%c.msgChSize] <- msg
+		c.msgCh[i%c.msgChSize] <- string(payload)
 	}
 }
 
-func (c *Client) loop(msgCh <-chan *Message) {
+func (c *Client) loop(msgCh <-chan string) {
 	for {
 		select {
-		case msg := <-msgCh:
+		case str := <-msgCh:
+			var msg Message
+			payload := []byte(str)
+			if err := json.Unmarshal(payload, &msg); err != nil {
+				fmt.Printf("Unmarshal data err:%s\n", err.Error())
+				continue
+			}
+
 			switch msg.Cmd {
 			case CmdLoginRes:
-				c.loginRes(msg)
+				c.loginRes(payload)
 			case CmdEventPush:
-				c.handler(msg)
+				c.handler(payload)
 			case CmdPong:
 				c.heartbeat <- "pong"
 			default:

@@ -12,7 +12,7 @@ type LoginData struct {
 	AuthId     string   `json:"auth_id"`
 	AuthSecret string   `json:"auth_secret"`
 	SubKey     string   `json:"subkey"`
-	Events     []string `json:"events"`
+	EventTypes []string `json:"events"`
 }
 
 type LoginResponse struct {
@@ -29,7 +29,7 @@ func (c *Client) login() error {
 		AuthId:     c.cfg.AuthID,
 		AuthSecret: c.cfg.AuthSecret,
 		SubKey:     c.cfg.SubKey,
-		Events:     strings.Split(c.cfg.EventTypes, ","),
+		EventTypes: strings.Split(c.cfg.EventTypes, ","),
 	}
 	pkt := Request{
 		Cmd:           CmdLoginReq,
@@ -43,9 +43,9 @@ func (c *Client) login() error {
 	return c.Send(buf)
 }
 
-func (c *Client) loginRes(msg *Message) {
+func (c *Client) loginRes(payload []byte) {
 	var resp LoginResponse
-	if err := json.Unmarshal(msg.Payload, &resp); err == nil && resp.Data.Result {
+	if err := json.Unmarshal(payload, &resp); err == nil && resp.Data.Result {
 		fmt.Println("snoti client login success")
 
 		go c.ping()
