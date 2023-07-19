@@ -190,7 +190,6 @@ func (c *Client) RemoteControl(data []ControlData) error {
 	}
 
 	buf, _ := json.Marshal(pkt)
-	fmt.Println(string(buf))
 	return c.Send(buf)
 }
 
