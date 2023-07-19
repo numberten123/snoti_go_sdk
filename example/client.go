@@ -27,6 +27,9 @@ type Response struct {
 	DeliveryId int    `json:"delivery_id"`
 	MsgId      string `json:"msg_id"`
 	EventType  string `json:"event_type"`
+	Did        string `json:"did"`
+	Mac        string `json:"mac"`
+	ProductKey string `json:"product_key"`
 }
 
 func Handler(payload []byte) {
@@ -35,7 +38,47 @@ func Handler(payload []byte) {
 		panic(err)
 	}
 
-	if err := client.Ack(resp.MsgId, resp.DeliveryId); err != nil {
-		panic(err)
+	//回复ack，未回复则会重发该消息
+	if resp.Cmd == "event_push" {
+		if err := client.Ack(resp.MsgId, resp.DeliveryId); err != nil {
+			panic(err)
+		}
 	}
+
+	//发送指令给到设备端
+	if resp.EventType == "device_online" {
+		RemoteControlByAttr(resp)
+		RemoteControlByRaw(resp)
+	}
+}
+
+func RemoteControlByAttr(resp Response) error {
+	data := []snoti.ControlData{
+		{
+			Cmd: snoti.ControlAttr,
+			Data: snoti.ControlDataDetail{
+				ProductKey: resp.ProductKey,
+				Did:        resp.Did,
+				Mac:        resp.Mac,
+				Attrs:      map[string]interface{}{"test2": 2}, //数据点kv数据
+			},
+		},
+	}
+	return client.RemoteControl(data)
+}
+
+func RemoteControlByRaw(resp Response) error {
+	data := []snoti.ControlData{
+		{
+			Cmd: snoti.ControlWrite,
+			Data: snoti.ControlDataDetail{
+				ProductKey:   resp.ProductKey,
+				Did:          resp.Did,
+				Mac:          resp.Mac,
+				BinaryCoding: "hex",
+				Raw:          "1203", //查询指令
+			},
+		},
+	}
+	return client.RemoteControl(data)
 }

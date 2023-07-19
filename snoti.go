@@ -162,28 +162,35 @@ func (c *Client) UnSubscribe(eventTypes string) error {
 	return c.Send(buf)
 }
 
+// const Control cmd type.
+const (
+	ControlAttr  = "write_attrs"
+	ControlWrite = "write"
+)
+
 type ControlData struct {
-	Cmd  string              `json:"cmd"`
-	Data []ControlDataDetail `json:"data"`
+	Cmd  string            `json:"cmd"`
+	Data ControlDataDetail `json:"data"`
 }
 
 type ControlDataDetail struct {
 	Did          string                 `json:"did"`
 	Mac          string                 `json:"mac"`
 	ProductKey   string                 `json:"product_key"`
-	BinaryCoding string                 `json:"binary_coding"`
-	Attrs        map[string]interface{} `json:"attrs"`
-	Raw          string                 `json:"raw"`
+	BinaryCoding string                 `json:"binary_coding,omitempty"`
+	Attrs        map[string]interface{} `json:"attrs,omitempty"`
+	Raw          string                 `json:"raw,omitempty"`
 }
 
 // RemoteControl send message to device by mqtt topic `app2dev/did`.
-func (c *Client) RemoteControl(data ControlData) error {
+func (c *Client) RemoteControl(data []ControlData) error {
 	pkt := Request{
 		Cmd:  CmdRemoteControl,
 		Data: data,
 	}
 
 	buf, _ := json.Marshal(pkt)
+	fmt.Println(string(buf))
 	return c.Send(buf)
 }
 
@@ -244,12 +251,10 @@ func (c *Client) loop(msgCh <-chan string) {
 			switch msg.Cmd {
 			case CmdLoginRes:
 				c.loginRes(payload)
-			case CmdEventPush:
-				c.handler(payload)
 			case CmdPong:
 				c.heartbeat <- "pong"
 			default:
-				fmt.Printf("unknown cmd:%s\n", msg.Cmd)
+				c.handler(payload)
 			}
 		}
 	}
