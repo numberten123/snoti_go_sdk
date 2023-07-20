@@ -106,7 +106,12 @@ func (c *Client) Stop() {
 	if c.conn != nil {
 		_ = c.conn.Close()
 	}
-	close(c.stopCh)
+
+	if c.stopCh != nil {
+		close(c.stopCh)
+
+		c.stopCh = nil
+	}
 }
 
 // Ack snoti message.
