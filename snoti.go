@@ -12,15 +12,16 @@ import (
 
 // const Snoti cmd type.
 const (
-	CmdLoginReq      = "login_req"
-	CmdLoginRes      = "login_res"
-	CmdEventPush     = "event_push"
-	CmdEventAck      = "event_ack"
-	CmdSubscribe     = "subscribe_req"
-	CmdUnSubscribe   = "unsubscribe_req"
-	CmdRemoteControl = "remote_control_v2_req"
-	CmdPing          = "ping"
-	CmdPong          = "pong"
+	CmdLoginReq           = "login_req"
+	CmdEnterpriseLoginReq = "enterprise_login_req"
+	CmdLoginRes           = "login_res"
+	CmdEventPush          = "event_push"
+	CmdEventAck           = "event_ack"
+	CmdSubscribe          = "subscribe_req"
+	CmdUnSubscribe        = "unsubscribe_req"
+	CmdRemoteControl      = "remote_control_v2_req"
+	CmdPing               = "ping"
+	CmdPong               = "pong"
 )
 
 // Request Snoti请求协议.
@@ -52,12 +53,16 @@ type Config struct {
 	AuthSecret string
 	// 消息订阅标识，可设置任意值，一个AuthID限额5个，详情见：http://docs.gizwits.com/zh-cn/Cloud/NotificationAPI.html#%E5%85%B3%E9%94%AE%E6%9C%AF%E8%AF%AD
 	SubKey string
-	//订阅消息类型，多个时用','隔开，详情见：http://docs.gizwits.com/zh-cn/Cloud/NotificationAPI.html#%E5%85%B3%E9%94%AE%E6%9C%AF%E8%AF%AD
+	// 订阅消息类型，多个时用','隔开，详情见：http://docs.gizwits.com/zh-cn/Cloud/NotificationAPI.html#%E5%85%B3%E9%94%AE%E6%9C%AF%E8%AF%AD
 	EventTypes string
-	//每次最多拉取消息条数，默认50.
+	// 每次最多拉取消息条数，默认50.
 	PrefetchCount int
-	//单消息最大容量(B)，默认1024B.
+	// 单消息最大容量(B)，默认1024B.
 	PacketSize int
+	// 企业ID，不为空时优先使用企业Id登录.
+	EnterpriseID string
+	// 企业秘钥.
+	EnterpriseSecret string
 }
 
 // Client is a client manages communication with the Snoti API.
