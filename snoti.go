@@ -220,7 +220,6 @@ func (c *Client) run() {
 	for {
 		select {
 		case <-c.ctx.Done():
-			c.Stop()
 			return
 		default:
 			c.stopCh = make(chan struct{})
