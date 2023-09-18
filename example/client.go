@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+
 	snoti "github.com/numberten123/snoti_go_sdk"
 )
 
@@ -18,7 +20,7 @@ func main() {
 		PrefetchCount: 50,
 		PacketSize:    1024,
 	}
-	client = snoti.NewClient(conf, Handler)
+	client = snoti.NewClient(context.Background(), conf, Handler)
 	client.Start()
 }
 

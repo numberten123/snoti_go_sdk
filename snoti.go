@@ -2,6 +2,7 @@ package snoti
 
 import (
 	"bufio"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -71,6 +72,7 @@ type Client struct {
 	handler Handler
 
 	conn      *tls.Conn
+	ctx       context.Context
 	stopCh    chan struct{}
 	heartbeat chan string
 	msgCh     []chan string
@@ -78,7 +80,7 @@ type Client struct {
 }
 
 // NewClient returns a new Snoti API client.
-func NewClient(conf Config, handler Handler) *Client {
+func NewClient(ctx context.Context, conf Config, handler Handler) *Client {
 	if conf.PrefetchCount == 0 || conf.PrefetchCount > 32767 {
 		conf.PrefetchCount = 50
 	}
@@ -88,6 +90,7 @@ func NewClient(conf Config, handler Handler) *Client {
 	}
 
 	return &Client{
+		ctx:       ctx,
 		cfg:       conf,
 		handler:   handler,
 		heartbeat: make(chan string, 100),
@@ -249,6 +252,9 @@ func (c *Client) receive() {
 func (c *Client) loop(msgCh <-chan string) {
 	for {
 		select {
+		case <-c.ctx.Done():
+			c.Stop()
+			return
 		case str := <-msgCh:
 			var msg Message
 			payload := []byte(str)
