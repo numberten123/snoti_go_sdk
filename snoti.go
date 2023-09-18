@@ -218,34 +218,35 @@ func (c *Client) Send(data []byte) error {
 func (c *Client) run() {
 	var err error
 	for {
-		c.stopCh = make(chan struct{})
-
-		if c.conn, err = tls.Dial("tcp", c.cfg.Endpoint, &tls.Config{InsecureSkipVerify: true}); err != nil {
-			fmt.Printf("snoti client connect error:%s\n", err.Error())
-		}
-
-		if err = c.login(); err != nil {
-			fmt.Printf("snoti client login error:%s\n", err.Error())
-		}
-
-		if err == nil {
-			c.receive()
-		}
-
-		c.Stop()
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func (c *Client) receive() {
-	reader := bufio.NewReaderSize(c.conn, c.cfg.PacketSize)
-	for i := 0; i >= 0; i++ {
-		payload, err := reader.ReadSlice('\n')
-		if err != nil {
-			fmt.Printf("ReadSlice error:%s\n", err.Error())
+		select {
+		case <-c.ctx.Done():
+			c.Stop()
 			return
+		default:
+			c.stopCh = make(chan struct{})
+			if c.conn, err = tls.Dial("tcp", c.cfg.Endpoint, &tls.Config{InsecureSkipVerify: true}); err != nil {
+				fmt.Printf("snoti client connect error:%s\n", err.Error())
+			}
+
+			if err = c.login(); err != nil {
+				fmt.Printf("snoti client login error:%s\n", err.Error())
+			}
+
+			if err == nil {
+				reader := bufio.NewReaderSize(c.conn, c.cfg.PacketSize)
+				for i := 0; i >= 0; i++ {
+					payload, err := reader.ReadSlice('\n')
+					if err != nil {
+						fmt.Printf("ReadSlice error:%s\n", err.Error())
+						break
+					}
+					c.msgCh[i%c.msgChSize] <- string(payload)
+				}
+			}
+
+			c.Stop()
+			time.Sleep(5 * time.Second)
 		}
-		c.msgCh[i%c.msgChSize] <- string(payload)
 	}
 }
 
@@ -253,7 +254,6 @@ func (c *Client) loop(msgCh <-chan string) {
 	for {
 		select {
 		case <-c.ctx.Done():
-			c.Stop()
 			return
 		case str := <-msgCh:
 			var msg Message
